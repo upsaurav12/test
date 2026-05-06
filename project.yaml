@@ -1,0 +1,8 @@
+project:
+  name: "hello_world"
+  port: 5432
+  router: "*gin.Engine"
+  database: "postgres"
+
+entities:
+  - user
