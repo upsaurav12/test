@@ -20,7 +20,7 @@ database "hello_world/internal/db"
 func main() {
 // Load .env if present (development convenience; no-op in production).
 if err := godotenv.Load(); err != nil && !os.IsNotExist(err) {
-slog.Warn("could not load .env file", "error", err)
+slog.Warn("could not load .env file – this is expected in production", "error", err)
 }
 
 cfg, err := config.New()

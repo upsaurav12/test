@@ -1,7 +1,6 @@
 package config
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -61,23 +60,23 @@ func (c *Config) IsDevelopment() bool {
 }
 
 func (c *Config) validate() error {
-	var errs []error
+	var missing []string
 
 	if c.DBName == "" {
-		errs = append(errs, errors.New("GONE_DB_DATABASE is required"))
+		missing = append(missing, "GONE_DB_DATABASE")
 	}
 	if c.DBUser == "" {
-		errs = append(errs, errors.New("GONE_DB_USERNAME is required"))
+		missing = append(missing, "GONE_DB_USERNAME")
 	}
 	if c.DBPassword == "" {
-		errs = append(errs, errors.New("GONE_DB_PASSWORD is required"))
+		missing = append(missing, "GONE_DB_PASSWORD")
 	}
 	if c.JWTSecret == "" {
-		errs = append(errs, errors.New("JWT_SECRET is required"))
+		missing = append(missing, "JWT_SECRET")
 	}
 
-	if len(errs) > 0 {
-		return fmt.Errorf("configuration errors: %w", errors.Join(errs...))
+	if len(missing) > 0 {
+		return fmt.Errorf("missing required configuration: %s", strings.Join(missing, ", "))
 	}
 
 	return nil

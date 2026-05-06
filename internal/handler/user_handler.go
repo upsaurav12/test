@@ -61,7 +61,9 @@ func (h *UserHandler) GetUser(c *gin.Context) {
 }
 
 func parseUintParam(c *gin.Context, key string) (uint, error) {
-	v, err := strconv.ParseUint(c.Param(key), 10, 64)
+	// Use bitSize=0 so ParseUint validates the value fits in a native uint,
+	// making the subsequent conversion to uint safe on both 32- and 64-bit platforms.
+	v, err := strconv.ParseUint(c.Param(key), 10, 0)
 	if err != nil {
 		return 0, err
 	}
