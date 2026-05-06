@@ -1,48 +1,29 @@
-package router
+package server
 
 import (
 	"fmt"
 	"net/http"
-	"os"
-	"strconv"
-		database "hello_world/internal/db"
 	"time"
 
-	"gorm.io/gorm"
+	database "hello_world/internal/db"
+	"hello_world/internal/config"
 )
 
+// Server holds the application's dependencies needed to build HTTP routes.
 type Server struct {
-	port   int
-	db     database.Service
-	gormDB *gorm.DB
+	cfg *config.Config
+	db  database.Service
 }
 
-func NewServer() *http.Server {
-	port, _ := strconv.Atoi(os.Getenv("PORT"))
+// New constructs and returns a fully configured *http.Server.
+func New(cfg *config.Config, db database.Service) *http.Server {
+	srv := &Server{cfg: cfg, db: db}
 
-	dbService := database.New()
-	if dbService == nil {
-		panic("database.New() returned nil — DB initialization failed")
-	}
-
-	gormDB := dbService.GetDB()
-	if gormDB == nil {
-		panic("dbService.GetDB() returned nil — Gorm DB is not initialized")
-	}
-
-	srv := &Server{
-		port:   port,
-		db:     dbService,
-		gormDB: gormDB,
-	}
-
-	httpServer := &http.Server{
-		Addr:         fmt.Sprintf(":%d", srv.port),
-		Handler:      srv.RegisterRoutes(),
-		IdleTimeout:  time.Minute,
+	return &http.Server{
+		Addr:         fmt.Sprintf(":%s", cfg.Port),
+		Handler:      srv.registerRoutes(),
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 30 * time.Second,
+		IdleTimeout:  time.Minute,
 	}
-
-	return httpServer
 }

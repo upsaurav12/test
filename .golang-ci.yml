@@ -10,3 +10,28 @@ linters:
     - gofmt
     - ineffassign
     - unused
+    - gosec
+    - revive
+    - gocritic
+    - nilerr
+    - errorlint
+    - wrapcheck
+    - gocognit
+    - misspell
+
+linters-settings:
+  gocognit:
+    min-complexity: 20
+  wrapcheck:
+    ignorePackageGlobs:
+      - "hello_world/internal/*"
+  gosec:
+    excludes:
+      - G115  # integer overflow – acceptable in controlled contexts
+
+issues:
+  exclude-rules:
+    - path: "_test\\.go"
+      linters:
+        - wrapcheck
+        - gosec
