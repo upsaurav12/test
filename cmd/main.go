@@ -1,58 +1,71 @@
 package main
 
 import (
-	"context"
-	"fmt"
-	"log"
-	"net/http"
-	"os/signal"
-	"syscall"
-	"time"
-	"hello_world/internal/server"
+"context"
+"errors"
+"log/slog"
+"net/http"
+"os"
+"os/signal"
+"syscall"
+"time"
+
+"github.com/joho/godotenv"
+
+"hello_world/internal/config"
+database "hello_world/internal/db"
+"hello_world/internal/server"
 )
 
-func gracefulShutdown(apiServer *http.Server, done chan bool) {
-	// Create context that listens for the interrupt signal from the OS.
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-
-	// Listen for the interrupt signal.
-	<-ctx.Done()
-
-	log.Println("shutting down gracefully, press Ctrl+C again to force")
-	stop() // Allow Ctrl+C to force shutdown
-
-	// The context is used to inform the server it has 5 seconds to finish
-	// the request it is currently handling
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := apiServer.Shutdown(ctx); err != nil {
-		log.Printf("Server forced to shutdown with error: %v", err)
-	}
-
-	log.Println("Server exiting")
-
-	// Notify the main goroutine that the shutdown is complete
-	done <- true
-}
-
 func main() {
-
-	server := router.NewServer()
-
-	// Create a done channel to signal when the shutdown is complete
-	done := make(chan bool, 1)
-
-	// Run graceful shutdown in a separate goroutine
-	go gracefulShutdown(server, done)
-
-	err := server.ListenAndServe()
-	if err != nil && err != http.ErrServerClosed {
-		panic(fmt.Sprintf("http server error: %s", err))
-	}
-
-	// Wait for the graceful shutdown to complete
-	<-done
-	log.Println("Graceful shutdown complete.")
+// Load .env if present (development convenience; no-op in production).
+if err := godotenv.Load(); err != nil && !os.IsNotExist(err) {
+slog.Warn("could not load .env file – this is expected in production", "error", err)
 }
 
+cfg, err := config.New()
+if err != nil {
+slog.Error("invalid configuration", "error", err)
+os.Exit(1)
+}
+
+dbService, err := database.New(cfg)
+if err != nil {
+slog.Error("failed to connect to database", "error", err)
+os.Exit(1)
+}
+
+httpServer := server.New(cfg, dbService)
+
+// Run graceful shutdown in a separate goroutine.
+idleConnsClosed := make(chan struct{})
+go func() {
+quit := make(chan os.Signal, 1)
+signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+<-quit
+
+slog.Info("shutdown signal received – draining connections...")
+
+ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+defer cancel()
+
+if err := httpServer.Shutdown(ctx); err != nil {
+slog.Error("server shutdown error", "error", err)
+}
+
+if err := dbService.Close(); err != nil {
+slog.Error("database close error", "error", err)
+}
+
+close(idleConnsClosed)
+}()
+
+slog.Info("server starting", "addr", httpServer.Addr)
+if err := httpServer.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+slog.Error("http server error", "error", err)
+os.Exit(1)
+}
+
+<-idleConnsClosed
+slog.Info("server stopped gracefully")
+}

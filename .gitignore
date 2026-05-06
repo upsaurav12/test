@@ -1,0 +1,23 @@
+# Binaries and build artifacts
+bin/
+*.exe
+
+# Environment files – never commit real secrets
+.env
+.env.local
+.env.*.local
+
+# Go test cache
+*.test
+*.out
+coverage.html
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
