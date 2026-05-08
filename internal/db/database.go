@@ -16,9 +16,9 @@ import (
 
 // Service defines the contract for interacting with the database layer.
 type Service interface {
-Health(ctx context.Context) map[string]string
-Close() error
-GetDB() *gorm.DB
+	Health(ctx context.Context) map[string]string
+	Close() error
+	GetDB() *gorm.DB
 }
 
 type service struct {

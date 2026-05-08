@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"time"
 
-	database "hello_world/internal/db"
 	"hello_world/internal/config"
+	database "hello_world/internal/db"
 )
 
 // Server holds the application's dependencies needed to build HTTP routes.
