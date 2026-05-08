@@ -20,10 +20,11 @@ func New(cfg *config.Config, db database.Service) *http.Server {
 	srv := &Server{cfg: cfg, db: db}
 
 	return &http.Server{
-		Addr:         fmt.Sprintf(":%s", cfg.Port),
-		Handler:      srv.registerRoutes(),
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 30 * time.Second,
-		IdleTimeout:  time.Minute,
+		Addr:              fmt.Sprintf(":%s", cfg.Port),
+		Handler:           srv.registerRoutes(),
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       time.Minute,
 	}
 }

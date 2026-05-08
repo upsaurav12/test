@@ -3,6 +3,7 @@ package middleware
 import (
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/time/rate"
@@ -18,21 +19,57 @@ type ipRateLimiter struct {
 	limiters sync.Map
 	r        rate.Limit
 	b        int
+	ttl      time.Duration
+}
+
+type limiterEntry struct {
+	limiter  *rate.Limiter
+	lastSeen int64
 }
 
 func newIPRateLimiter(r rate.Limit, b int) *ipRateLimiter {
-	return &ipRateLimiter{r: r, b: b}
+	rl := &ipRateLimiter{
+		r:   r,
+		b:   b,
+		ttl: 15 * time.Minute,
+	}
+	go rl.startCleanupLoop(5 * time.Minute)
+	return rl
 }
 
 func (i *ipRateLimiter) getLimiter(ip string) *rate.Limiter {
+	now := time.Now().UnixNano()
 	// Fast path: limiter already exists.
 	if v, ok := i.limiters.Load(ip); ok {
-		return v.(*rate.Limiter)
+		entry := v.(*limiterEntry)
+		entry.lastSeen = now
+		return entry.limiter
 	}
 	// Slow path: create and store, guarding against a concurrent insert.
-	l := rate.NewLimiter(i.r, i.b)
-	v, _ := i.limiters.LoadOrStore(ip, l)
-	return v.(*rate.Limiter)
+	entry := &limiterEntry{
+		limiter:  rate.NewLimiter(i.r, i.b),
+		lastSeen: now,
+	}
+	v, _ := i.limiters.LoadOrStore(ip, entry)
+	stored := v.(*limiterEntry)
+	stored.lastSeen = now
+	return stored.limiter
+}
+
+func (i *ipRateLimiter) startCleanupLoop(interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for now := range ticker.C {
+		cutoff := now.Add(-i.ttl).UnixNano()
+		i.limiters.Range(func(key, value any) bool {
+			entry, ok := value.(*limiterEntry)
+			if !ok || entry.lastSeen < cutoff {
+				i.limiters.Delete(key)
+			}
+			return true
+		})
+	}
 }
 
 // RateLimit returns a per-IP rate-limiting middleware using a token-bucket
