@@ -51,9 +51,10 @@ func New(cfg *config.Config) (Service, error) {
 	// Connection pool tuning.
 	sqlDB.SetMaxOpenConns(cfg.DBMaxOpenConns)
 	sqlDB.SetMaxIdleConns(cfg.DBMaxIdleConns)
-	sqlDB.SetConnMaxLifetime(time.Duration(cfg.DBConnMaxLifetimeSecs) * time.Second)
+	connMaxLifetime := time.Duration(cfg.DBConnMaxLifetimeSecs) * time.Second
+	sqlDB.SetConnMaxLifetime(connMaxLifetime)
 	// Keep idle timeout proportional to max lifetime while preserving previous 2m default behavior.
-	sqlDB.SetConnMaxIdleTime(time.Duration(cfg.DBConnMaxLifetimeSecs/2) * time.Second)
+	sqlDB.SetConnMaxIdleTime(connMaxLifetime / 2)
 
 	// Fail fast if the database is unreachable at startup.
 	if err := sqlDB.PingContext(context.Background()); err != nil {

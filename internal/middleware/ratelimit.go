@@ -3,6 +3,7 @@ package middleware
 import (
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -42,7 +43,7 @@ func (i *ipRateLimiter) getLimiter(ip string) *rate.Limiter {
 	// Fast path: limiter already exists.
 	if v, ok := i.limiters.Load(ip); ok {
 		entry := v.(*limiterEntry)
-		entry.lastSeen = now
+		atomic.StoreInt64(&entry.lastSeen, now)
 		return entry.limiter
 	}
 	// Slow path: create and store, guarding against a concurrent insert.
@@ -52,7 +53,7 @@ func (i *ipRateLimiter) getLimiter(ip string) *rate.Limiter {
 	}
 	v, _ := i.limiters.LoadOrStore(ip, entry)
 	stored := v.(*limiterEntry)
-	stored.lastSeen = now
+	atomic.StoreInt64(&stored.lastSeen, now)
 	return stored.limiter
 }
 
@@ -64,7 +65,7 @@ func (i *ipRateLimiter) startCleanupLoop(interval time.Duration) {
 		cutoff := now.Add(-i.ttl).UnixNano()
 		i.limiters.Range(func(key, value any) bool {
 			entry, ok := value.(*limiterEntry)
-			if !ok || entry.lastSeen < cutoff {
+			if !ok || atomic.LoadInt64(&entry.lastSeen) < cutoff {
 				i.limiters.Delete(key)
 			}
 			return true
