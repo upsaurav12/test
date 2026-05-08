@@ -21,6 +21,7 @@ type ipRateLimiter struct {
 	r        rate.Limit
 	b        int
 	ttl      time.Duration
+	hits     uint64
 }
 
 type limiterEntry struct {
@@ -29,17 +30,20 @@ type limiterEntry struct {
 }
 
 func newIPRateLimiter(r rate.Limit, b int) *ipRateLimiter {
-	rl := &ipRateLimiter{
+	return &ipRateLimiter{
 		r:   r,
 		b:   b,
 		ttl: 15 * time.Minute,
 	}
-	go rl.startCleanupLoop(5 * time.Minute)
-	return rl
 }
 
 func (i *ipRateLimiter) getLimiter(ip string) *rate.Limiter {
 	now := time.Now().UnixNano()
+	// Opportunistic cleanup every 256 requests to avoid background goroutine leaks.
+	if atomic.AddUint64(&i.hits, 1)%256 == 0 {
+		i.cleanup(now)
+	}
+
 	// Fast path: limiter already exists.
 	if v, ok := i.limiters.Load(ip); ok {
 		entry := v.(*limiterEntry)
@@ -57,20 +61,18 @@ func (i *ipRateLimiter) getLimiter(ip string) *rate.Limiter {
 	return stored.limiter
 }
 
-func (i *ipRateLimiter) startCleanupLoop(interval time.Duration) {
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-
-	for now := range ticker.C {
-		cutoff := now.Add(-i.ttl).UnixNano()
-		i.limiters.Range(func(key, value any) bool {
-			entry, ok := value.(*limiterEntry)
-			if !ok || atomic.LoadInt64(&entry.lastSeen) < cutoff {
-				i.limiters.Delete(key)
-			}
+func (i *ipRateLimiter) cleanup(nowNanos int64) {
+	cutoff := nowNanos - i.ttl.Nanoseconds()
+	i.limiters.Range(func(key, value any) bool {
+		entry, ok := value.(*limiterEntry)
+		if !ok {
 			return true
-		})
-	}
+		}
+		if atomic.LoadInt64(&entry.lastSeen) < cutoff {
+			i.limiters.Delete(key)
+		}
+		return true
+	})
 }
 
 // RateLimit returns a per-IP rate-limiting middleware using a token-bucket
